@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>恵光寺 お参り受付</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --green:#4f6b3a; --light:#eef3e8; --ink:#2b2b2b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Hiragino Mincho ProN","Yu Mincho",serif; color:var(--ink);
+         background:var(--light); font-size:19px; line-height:1.7; }
+  header { background:var(--green); color:#fff; text-align:center; padding:18px 12px; }
+  header .sub { font-size:14px; opacity:.85; }
+  header h1 { margin:2px 0 0; font-size:24px; letter-spacing:.1em; }
+  main { padding:22px 18px 40px; max-width:520px; margin:0 auto; }
+  .card { background:#fff; border-radius:14px; padding:22px 18px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .event { font-size:22px; font-weight:bold; color:var(--green); margin:6px 0 14px; }
+  label { display:block; font-weight:bold; margin:16px 0 6px; }
+  input[type=text], textarea { width:100%; font-size:19px; padding:12px; border:1px solid #bbb; border-radius:10px; font-family:inherit; }
+  .opt { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #ccc; border-radius:10px; margin:8px 0; font-weight:normal; }
+  .opt input { width:22px; height:22px; }
+  .note { font-size:14px; color:#666; }
+  button { width:100%; font-size:22px; font-family:inherit; padding:16px; margin-top:22px; border:none;
+           border-radius:14px; background:var(--green); color:#fff; font-weight:bold; }
+  button:disabled { opacity:.5; }
+  button.sub { background:#fff; color:var(--green); border:2px solid var(--green); font-size:18px; padding:12px; }
+  .big { font-size:26px; text-align:center; margin:10px 0; }
+  .center { text-align:center; }
+  .err { color:#a33; }
+  .invite { margin-top:22px; padding:16px 14px; border-radius:12px; background:#f6f9f2; border:1px solid #c9d8bc; }
+  .invite-title { font-weight:bold; color:var(--green); font-size:20px; }
+  .invite p { margin:6px 0 10px; font-size:16px; }
+  #other { margin-top:4px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="sub">柳の御坊</div>
+  <h1>恵光寺 お参り受付</h1>
+</header>
+<main>
+  <div class="card" id="view-loading"><p class="center">読み込み中です…</p></div>
+
+  <!-- 初回登録 -->
+  <form class="card" id="view-register" hidden>
+    <p>はじめてのお参り、ありがとうございます。<br>最初に一度だけ、お名前などをご登録ください。</p>
+    <label for="name">お名前</label>
+    <input type="text" id="name" autocomplete="name" required>
+
+    <label>恵光寺とのご関係</label>
+    <div id="relation"></div>
+
+    <div id="newcomer" hidden>
+      <label>恵光寺を何で知りましたか</label>
+      <div id="source"></div>
+      <input type="text" id="other" placeholder="よろしければ、具体的にお書きください" hidden>
+
+      <div class="invite">
+        <div class="invite-title">ご住所をお聞かせください</div>
+        <p>お書きいただいた方には、恵光寺の行事のご案内をお届けします。お書きいただける範囲で結構です。</p>
+        <p class="note">ご案内が不要になりましたら、いつでも恵光寺までお知らせください。郵送を止めさせていただきます。</p>
+        <textarea id="address" rows="2" autocomplete="street-address" placeholder="例）八尾市〇〇町1-2-3"></textarea>
+      </div>
+    </div>
+
+    <p class="note">ご登録の内容は、恵光寺の行事のご案内と出席の記録にのみ使います。</p>
+    <p class="err" id="reg-err"></p>
+    <button type="submit" id="reg-btn">登録して受付する</button>
+  </form>
+
+  <!-- 受付 -->
+  <div class="card" id="view-checkin" hidden>
+    <p id="hello"></p>
+    <div id="one-event">
+      <div>本日の行事</div>
+      <div class="event" id="event-title"></div>
+      <button id="checkin-btn">お参りを受付する</button>
+    </div>
+    <div id="many-events" hidden>
+      <div>ただいま複数の行事が開かれています。<br><b>どちらの行事にお参りですか？</b></div>
+      <div id="event-choices"></div>
+    </div>
+  </div>
+
+  <!-- 完了 -->
+  <div class="card" id="view-done" hidden>
+    <p class="big">ようこそ<br>お参りくださいました</p>
+    <p class="center" id="done-msg"></p>
+    <button class="sub" id="close-btn">閉じる</button>
+  </div>
+
+  <!-- 行事なし・エラー -->
+  <div class="card" id="view-msg" hidden>
+    <p class="center" id="msg"></p>
+    <button class="sub" id="close-btn2">閉じる</button>
+  </div>
+</main>
+
+<script>
+/* ★ ここの2か所を書き換えてください（設定手順書 参照） */
+const LIFF_ID = 'ここにLIFF IDを貼り付け';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwQI-xRcQk7-clRNEEjpRntJegkW0KX81I9n4hAJvbmCl7_X13v2iRMiRCv-ZJhnXxVag/exec';
+
+const $ = id => document.getElementById(id);
+const place = new URLSearchParams(location.search).get('place') || '本堂';
+let idToken = null;
+
+function show(view) {
+  ['loading', 'register', 'checkin', 'done', 'msg'].forEach(v => $('view-' + v).hidden = (v !== view));
+}
+function message(text) { $('msg').textContent = text; show('msg'); }
+
+async function api(body) {
+  body.idToken = idToken;
+  // Content-Typeを付けない（text/plain扱い）ことで、Apps Scriptへ直接送れる
+  const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!data.ok && data.error) throw new Error(data.error);
+  return data;
+}
+
+function closeApp() {
+  if (liff.isInClient()) liff.closeWindow(); else window.close();
+}
+
+let chosenKey = '';
+
+// 受付画面を出す（行事が1つならボタン1つ、複数なら行事ごとのボタン）
+function showEvents(events) {
+  const many = events.length > 1;
+  $('one-event').hidden = many;
+  $('many-events').hidden = !many;
+  if (!many) {
+    chosenKey = events[0].key;
+    $('event-title').textContent = events[0].title;
+  } else {
+    $('event-choices').innerHTML = '';
+    events.forEach(ev => {
+      const b = document.createElement('button');
+      b.textContent = `${ev.title}（${ev.time}）`;
+      b.addEventListener('click', async () => {
+        document.querySelectorAll('#event-choices button').forEach(x => x.disabled = true);
+        try { await doCheckin(ev.key); } catch (e) { message(e.message); }
+        finally { document.querySelectorAll('#event-choices button').forEach(x => x.disabled = false); }
+      });
+      $('event-choices').appendChild(b);
+    });
+  }
+  show('checkin');
+}
+
+async function doCheckin(eventKey) {
+  const r = await api({ action: 'checkin', place: place, eventKey: eventKey || '' });
+  if (r.noEvent) return message('ただいま受付中の行事はありません。行事の時間になってから、もう一度かざしてください。');
+  if (r.needRegister) return start();
+  if (r.needChoice) return showEvents(r.events);
+  $('done-msg').textContent = r.already
+    ? `${r.name}さん、「${r.eventTitle}」はすでに受付済みです。`
+    : `${r.name}さん、「${r.eventTitle}」の受付が完了しました。これまでのお参りは ${r.count} 回です。`;
+  show('done');
+}
+
+async function start() {
+  show('loading');
+  const s = await api({ action: 'status' });
+  if (!s.events.length) return message('ただいま受付中の行事はありません。行事の時間になってから、もう一度かざしてください。');
+  if (!s.registered) {
+    relationOptions = s.relationOptions;
+    sourceOptions = s.sourceOptions;
+    radios('relation', relationOptions, onRelationChange);
+    radios('source', sourceOptions, onSourceChange);
+    show('register');
+    return;
+  }
+  $('hello').textContent = `${s.name}さん、ようこそ。`;
+  showEvents(s.events);
+}
+
+let relationOptions = [], sourceOptions = [];
+
+function radios(boxId, options, onChange) {
+  const box = $(boxId);
+  box.innerHTML = '';
+  options.forEach(opt => {
+    const l = document.createElement('label');
+    l.className = 'opt';
+    const r = document.createElement('input');
+    r.type = 'radio'; r.name = boxId; r.value = opt;
+    r.addEventListener('change', onChange);
+    l.appendChild(r);
+    l.appendChild(document.createTextNode(opt));
+    box.appendChild(l);
+  });
+}
+const picked = name => {
+  const el = document.querySelector(`input[name=${name}]:checked`);
+  return el ? el.value : '';
+};
+const isMonto = () => picked('relation') === relationOptions[0];
+const isOther = () => picked('source') === sourceOptions[sourceOptions.length - 1];
+
+function onRelationChange() { $('newcomer').hidden = !picked('relation') || isMonto(); }
+function onSourceChange() { $('other').hidden = !isOther(); }
+
+$('view-register').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  $('reg-err').textContent = '';
+  const relation = picked('relation');
+  const source = picked('source');
+  if (!$('name').value.trim()) { $('reg-err').textContent = 'お名前をご記入ください。'; return; }
+  if (!relation) { $('reg-err').textContent = '「恵光寺とのご関係」をお選びください。'; return; }
+  if (!isMonto() && !source) { $('reg-err').textContent = '「恵光寺を何で知りましたか」をお選びください。'; return; }
+  $('reg-btn').disabled = true;
+  try {
+    await api({
+      action: 'register',
+      name: $('name').value,
+      relation: relation,
+      source: isMonto() ? '' : source,
+      other: (!isMonto() && isOther()) ? $('other').value : '',
+      address: isMonto() ? '' : $('address').value,
+    });
+    await doCheckin();
+  } catch (e) {
+    $('reg-err').textContent = e.message;
+  } finally {
+    $('reg-btn').disabled = false;
+  }
+});
+
+$('checkin-btn').addEventListener('click', async () => {
+  $('checkin-btn').disabled = true;
+  try { await doCheckin(chosenKey); } catch (e) { message(e.message); }
+  finally { $('checkin-btn').disabled = false; }
+});
+$('close-btn').addEventListener('click', closeApp);
+$('close-btn2').addEventListener('click', closeApp);
+
+(async () => {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    idToken = liff.getIDToken();
+    if (!idToken) throw new Error('LINEの設定（openid）が不足しています。お寺にお知らせください。');
+    await start();
+  } catch (e) {
+    message('うまく開けませんでした：' + e.message);
+  }
+})();
+</script>
+</body>
+</html>
